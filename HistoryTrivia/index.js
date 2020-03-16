@@ -119,7 +119,7 @@ const AnswerHandler = {
             speakOutput = `I am sorry but that is incorrect. The correct answer is ${attributes.correct_answer}`
           }
         }
-        resolve(handlerInput.responseBuilder.speak(speakOutput).getResponse());
+        resolve(handlerInput.responseBuilder.speak(speakOutput).withShouldEndSession(false).getResponse());
       })
     });
   },
@@ -131,11 +131,9 @@ const HelpHandler = {
       && handlerInput.requestEnvelope.request.intent.name === 'AMAZON.HelpIntent';
   },
   handle(handlerInput) {
-    const speakOutput = 'Ask me what happened today in history!';
+    const speakOutput = `Welcome to History Trivia! To begin, please say a phrase like ask me a question. When you are ready to give your answer, say: 'my answer is *insert response*' `;
 
-    return handlerInput.responseBuilder
-      .speak(speakOutput)
-      .getResponse();
+    return handlerInput.responseBuilder.speak(speakOutput).withShouldEndSession(false).getResponse();
   },
 };
 
