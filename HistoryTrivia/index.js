@@ -104,20 +104,25 @@ const AnswerHandler = {
   handle(handlerInput) {
     return new Promise((resolve) => {
       getQuestion((result) => {
-        const attributes = handlerInput.attributesManager.getSessionAttributes();
-        var user_answer = handlerInput.requestEnvelope.request.intent.slots.answer.value.toLowerCase()
         var speakOutput = "answer handler"
-        var matching_scores = get_match_scores(user_answer, attributes.answer_list)
-        if (!validate_response(attributes.answer_options, user_answer, matching_scores)) {
-            speakOutput = `I am sorry, that was not a valid response. Plase select between ${attributes.answer_list}`
-        }
-        else {
-          if (correct_response(user_answer, attributes)) {
-            speakOutput = `Correct! That is the right answer`;
+        try {
+          const attributes = handlerInput.attributesManager.getSessionAttributes();
+          var user_answer = handlerInput.requestEnvelope.request.intent.slots.answer.value.toLowerCase()
+          var matching_scores = get_match_scores(user_answer, attributes.answer_list)
+          if (!validate_response(attributes.answer_options, user_answer, matching_scores)) {
+              speakOutput = `I am sorry, that was not a valid response. Plase select between ${attributes.answer_list}`
           }
           else {
-            speakOutput = `I am sorry but that is incorrect. The correct answer is ${attributes.correct_answer}`
+            if (correct_response(user_answer, attributes)) {
+              speakOutput = `Correct! That is the right answer`;
+            }
+            else {
+              speakOutput = `I am sorry but that is incorrect. The correct answer is ${attributes.correct_answer}`
+            }
           }
+        }
+        catch {
+          speakOutput = `Welcome to History Trivia! To begin, please say a phrase like ask me a question. When you are ready to give your answer, say: 'my answer is *insert response*' `;
         }
         resolve(handlerInput.responseBuilder.speak(speakOutput).withShouldEndSession(false).getResponse());
       })
