@@ -1,5 +1,6 @@
 const Alexa = require('ask-sdk-core');
 const request = require('request');
+const stringSimilarity = require('string-similarity');
 
 function getQuestion(callback) {
   return new Promise(function(resolve, reject) {
@@ -22,18 +23,31 @@ function shuffle(a) {
     return a;
 }
 
+function get_match_scores(user_answer, answer_list) {
+  var matching_scores = []
+  for (const index in answer_list) {
+    matching_scores.push(stringSimilarity.compareTwoStrings(user_answer, answer_list[index]))
+  }
+  return matching_scores
+}
+
+function validate_response(answer_options, user_answer, matching_scores) {
+  return answer_options.includes(user_answer) || (Math.max(...matching_scores) >= 0.8)
+}
+
+function correct_response(user_answer, attributes) {
+  return stringSimilarity.compareTwoStrings(user_answer, attributes.correct_answer) >= 0.8 || user_answer === attributes.correct_option
+}
+
 const LaunchRequestHandler = {
   canHandle(handlerInput) {
     return handlerInput.requestEnvelope.request.type === 'LaunchRequest';
   },
   handle(handlerInput) {
     const speakOutput = "Welcome to History Trivia! To begin, please say a phrase like ask me a question";
-      
     return handlerInput.responseBuilder.speak(speakOutput).withShouldEndSession(false).getResponse();
-    
   },
 };
-
 
 const QuizHandler = {
   canHandle(handlerInput) {
@@ -43,38 +57,38 @@ const QuizHandler = {
   handle(handlerInput) {
     return new Promise((resolve) => {
       getQuestion((result) => {
-        console.log("inside quiz handler")
         const attributes = handlerInput.attributesManager.getSessionAttributes();
-        console.log(`slots: ${handlerInput.requestEnvelope.request.intent.slots}`)
         var question = result.results[0].question;
-        var answer = result.results[0].correct_answer
+        var answer = result.results[0].correct_answer.toLowerCase()
         var incorrect_answers = result.results[0].incorrect_answers
-        console.log(`question: ${question}`)
-        console.log(`answer: ${answer}`)
-        
+
         attributes.question = question
         attributes.correct_answer = answer
         
         var answers_list = []
         for (const index in incorrect_answers) {
-          answers_list.push(incorrect_answers[index])
+          answers_list.push(incorrect_answers[index].toLowerCase())
         }
         answers_list.push(answer)
         var shuffled_list = shuffle(answers_list)
-        console.log(`shuffled_list: ${shuffled_list}`)
-        var answer_options = "Is it ";
+        var answer_options = "";
+        var letter_options = ["a", "b", "c", "d"]
         for (const index in shuffled_list) {
           if (index == shuffled_list.length - 1) {
-            answer_options += `or ${shuffled_list[index]}`
+            answer_options += `or ${letter_options[index]}: ${shuffled_list[index]}`
           }
           else {
-            answer_options += `${shuffled_list[index]}, `; 
+            answer_options += `${letter_options[index]}: ${shuffled_list[index]}, `; 
           }
+          if (attributes.correct_answer === shuffled_list[index]) {
+              attributes.correct_option = letter_options[index]
+            }
         }
-        attributes.answer_text = answer_options
+        attributes.answer_text = `Is it ${answer_options}`
         attributes.answer_list = shuffled_list
+        attributes.answer_options = letter_options.slice(0, letter_options.length)
         
-        const speakOutput = question + " " + answer_options;
+        const speakOutput = `${question} ${answer_options}`;
 
         resolve(handlerInput.responseBuilder.speak(speakOutput).withShouldEndSession(false).getResponse());
       })
@@ -91,28 +105,20 @@ const AnswerHandler = {
     return new Promise((resolve) => {
       getQuestion((result) => {
         const attributes = handlerInput.attributesManager.getSessionAttributes();
-        console.log(`user input: ${handlerInput.requestEnvelope.request.intent.slots.answer.value}`)
-        var user_answer = handlerInput.requestEnvelope.request.intent.slots.answer.value
+        var user_answer = handlerInput.requestEnvelope.request.intent.slots.answer.value.toLowerCase()
         var speakOutput = "answer handler"
-        for (const index in attributes.answer_list) {
-          console.log(`answer choice: ${attributes.answer_list[index]}`)
-        }
-        if (!attributes.answer_list.includes(user_answer)) {
-          console.log(`user_answer: ${user_answer}`)
-          console.log(`answer_list: ${attributes.answer_list}`)
-          console.log(`typeof(answer_list): ${typeof(attributes.answer_list)}`)
-          speakOutput = `I am sorry, that was not a valid response. Please select between ${attributes.answer_list}`
+        var matching_scores = get_match_scores(user_answer, attributes.answer_list)
+        if (!validate_response(attributes.answer_options, user_answer, matching_scores)) {
+            speakOutput = `I am sorry, that was not a valid response. Plase select between ${attributes.answer_list}`
         }
         else {
-          if (user_answer === attributes.correct_answer) {
+          if (correct_response(user_answer, attributes)) {
             speakOutput = `Correct! That is the right answer`;
           }
           else {
             speakOutput = `I am sorry but that is incorrect. The correct answer is ${attributes.correct_answer}`
           }
         }
-        
-
         resolve(handlerInput.responseBuilder.speak(speakOutput).getResponse());
       })
     });
@@ -164,10 +170,6 @@ const ErrorHandler = {
     return true;
   },
   handle(handlerInput, error) {
-    console.log(`Error handled: ${error.message}`);
-    console.log(error.trace);
-    console.log(JSON.stringify(handlerInput));
-
     return handlerInput.responseBuilder
       .speak('Sorry, I can\'t understand the command. Please say again.')
       .getResponse();
